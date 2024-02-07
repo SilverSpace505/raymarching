@@ -18,6 +18,7 @@ class Webgl {
 			vColour = aColour;
 	 		vPos = uModel * aPosition;
 			gl_Position = uProjection * uView * uModel * aPosition;
+            gl_PointSize = 5.0;
 		}
 	`
 	fragmentShader = `#version 300 es
@@ -68,9 +69,11 @@ class Webgl {
 	rDistance = 0
 	modelBuffer
 	ri = 0
+	setup(id="glcanvas") {
+        window.glcanvas = document.getElementById(id)
+        window.gl = window.glcanvas.getContext("webgl2", {antialias: false})
 
-	constructor() {
-		this.vertexShaderGL = gl.createShader(gl.VERTEX_SHADER)
+        this.vertexShaderGL = gl.createShader(gl.VERTEX_SHADER)
 		gl.shaderSource(this.vertexShaderGL, this.vertexShader)
 		gl.compileShader(this.vertexShaderGL)
 		
@@ -104,12 +107,57 @@ class Webgl {
 		}
 
 		this.modelBuffer = gl.createBuffer()
-	}
 
+        let mat4script = document.createElement("script")
+        mat4script.type = "text/javascript"
+        mat4script.src = "https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"
+        document.head.appendChild(mat4script)
+
+        window.fov = 60
+
+        mat4script.onload = () => {
+            window.view = mat4.create()
+            window.projection = mat4.create()
+        }
+    }
+    setStyles() {
+        glcanvas.style.position = "absolute"
+        glcanvas.style.left = 0
+        glcanvas.style.top = 0
+        document.body.style.overflow = "hidden"
+    }
+    resizeCanvas() {
+        glcanvas.width = window.innerWidth
+        glcanvas.height = window.innerHeight
+    }
 	sortObjs() {
 		this.meshes.sort((a, b) => a.rOrder - b.rOrder)
 	}
+    setView(camera) {
+        if (!window.mat4) return
+        view = mat4.create()
+        mat4.translate(view, view, [camera.pos.x, camera.pos.y, camera.pos.z])
+        mat4.rotateY(view, view, camera.rot.y)
+        mat4.rotateX(view, view, camera.rot.x)
+        mat4.rotateZ(view, view, camera.rot.z)
+        mat4.invert(view, view)
+    }
+    setupFrame(colour=[0, 0, 0, 1]) {
+        if (!window.mat4) return
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
+        gl.clearColor(0, 0, 0, 1)
+        gl.clear(gl.STENCIL_BUFFER_BIT | gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+        gl.enable(gl.DEPTH_TEST)
 
+        gl.enable(gl.BLEND)
+        gl.clear(gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+        gl.enable(gl.BLEND)
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+        mat4.perspective(projection, fov * Math.PI / 180, gl.canvas.width / gl.canvas.height, 0.01, 5000)
+
+        gl.enable(gl.DEPTH_TEST)
+    }
 	setupModels() {
 		this.modelData = []
 		for (let mesh of this.meshes) {
@@ -120,13 +168,9 @@ class Webgl {
 
 	}
 
-    setup(id="glcanvas") {
-		window.glcanvas = document.getElementById(id)
-		window.gl = canvas.getContext("webgl2", { antialias: false })
-	}
-
 	doRender = true
 	render() {
+        if (!window.mat4) return
 		gl.useProgram(this.program)
 
 		// this.setupModels()
@@ -144,6 +188,20 @@ class Webgl {
 		let ignoreDepth = []
 
 		for (let mesh of this.meshes) {
+			if ((mesh.customVShader || mesh.customFShader) && mesh.visible && mesh.vertices.length > 0) {
+				if (!mesh.gotView) {
+					gl.useProgram(mesh.program)
+					gl.uniformMatrix4fv(mesh.uniforms.view, false, view)
+					gl.useProgram(this.program)
+					mesh.gotView = true
+				}
+				if (!mesh.gotProjection) {
+					gl.useProgram(mesh.program)
+					gl.uniformMatrix4fv(mesh.uniforms.projection, false, projection)
+					gl.useProgram(this.program)
+					mesh.gotProjection = true
+				}
+			}
 			if (this.doRender) {
 				if (mesh.ignoreDepth) {
 					ignoreDepth.push(mesh)
@@ -176,7 +234,6 @@ class Webgl {
 			mesh.render()
 		}
 	}
-
 	update() {
 		this.updateView = JSON.stringify(view) != JSON.stringify(this.lastView)
 		this.lastView = {...view}
@@ -184,9 +241,23 @@ class Webgl {
 		this.lastProjection = {...projection}
 		if (this.updateView) {
 			gl.uniformMatrix4fv(this.uniforms.view, false, view)
+			for (let mesh of this.meshes) {
+				if (mesh.vertices.length > 0 && mesh.visible && (mesh.customFShader || mesh.customVShader)) {
+					gl.useProgram(mesh.program)
+					gl.uniformMatrix4fv(mesh.uniforms.view, false, view)
+					gl.useProgram(this.program)
+				}
+			}
 		}
 		if (this.updateProjection) {
 			gl.uniformMatrix4fv(this.uniforms.projection, false, projection)
+			for (let mesh of this.meshes) {
+				if (mesh.vertices.length > 0 && mesh.visible && (mesh.customFShader || mesh.customVShader)) {
+					gl.useProgram(mesh.program)
+					gl.uniformMatrix4fv(mesh.uniforms.projection, false, projection)
+					gl.useProgram(this.program)
+				}
+			}
 		}
 	}
 	
@@ -196,7 +267,7 @@ class Webgl {
 			src
 			id
 			texture
-			constructor(src) {
+			constructor(src, filter=false) {
 				this.img = new Image()
 				this.img.src = src
 				this.src = src
@@ -213,9 +284,13 @@ class Webgl {
 					gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
 					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img)
 
-					
-					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+					if (filter) {
+						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+					} else {
+						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+						gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+					}
 					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 				}
@@ -236,6 +311,7 @@ class Webgl {
 			faceBuffer
 			uvBuffer
 			colourBuffer
+			customBuffers = {}
 			useTexture = false
 			useAlpha = false
 			texture
@@ -257,6 +333,19 @@ class Webgl {
 			ignoreFog = false
 			originalFaces = []
             alpha = 1
+			customModel = null
+			customVShader = false
+			customFShader = false
+			vertexShaderGL
+			fragmentShaderGL
+			vertexShader = ""
+			fragmentShader = ""
+			uvD = 2
+			program
+			uniforms = {}
+			attributes = {}
+			gotView = false
+			gotProjection = false
 			constructor(x, y, z, width, height, depth, vertices, faces, colours) {
 				this.pos = {x: x, y: y, z: z}
 				this.size = {x: width, y: height, z: depth}
@@ -274,7 +363,74 @@ class Webgl {
 
 				gl.bindVertexArray(this.vao)
 			}
+			createBuffer(name, attribName, dim) {
+				this.customBuffers[name] = {buffer: gl.createBuffer()}
+				this.customBuffers[name].attrib = attribName
+				this.customBuffers[name].dim = dim
+			}
+			setBuffer(name, value) {
+				this.customBuffers[name].value = value
+			}
+			setVShader(vertexShader=null) {
+				if (vertexShader) {
+					this.vertexShader = vertexShader
+					this.customVShader = true
+					this.vertexShaderGL = gl.createShader(gl.VERTEX_SHADER)
+					gl.shaderSource(this.vertexShaderGL, this.vertexShader)
+					gl.compileShader(this.vertexShaderGL)
+				} else {
+					this.customVShader = false
+				}
+			}
+			setFShader(fragmentShader=null) {
+				if (fragmentShader) {
+					this.fragmentShader = fragmentShader
+					this.customFShader = true
+					this.fragmentShaderGL = gl.createShader(gl.FRAGMENT_SHADER)
+					gl.shaderSource(this.fragmentShaderGL, this.fragmentShader)
+					gl.compileShader(this.fragmentShaderGL)
+				} else {
+					this.customFShader = false
+				}
+			}
+			setProgram(
+				uniforms={model: "uModel", view: "uView", projection: "uProjection", useTexture: "useTexture", texture: "uTexture", useAlphaMap: "useAlphaMap", alpha: "uAlpha", alpha2: "uAlpha2"},
+				attributes={vertices: "aPosition", uvs: "aUv", colours: "aColour"}
+				) {
+				this.program = gl.createProgram()
+				let vertexShaderGL = this.customVShader ? this.vertexShaderGL : webgl.vertexShaderGL
+				let fragmentShaderGL = this.customFShader ? this.fragmentShaderGL : webgl.fragmentShaderGL
+				gl.attachShader(this.program, vertexShaderGL)
+				gl.attachShader(this.program, fragmentShaderGL)
+				gl.linkProgram(this.program)
+
+				if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+					console.log(gl.getShaderInfoLog(vertexShaderGL))
+					console.log(gl.getShaderInfoLog(fragmentShaderGL))
+				}
+
+				this.uniforms = {}
+				for (let uniform in uniforms) {
+					this.uniforms[uniform] = gl.getUniformLocation(this.program, uniforms[uniform])
+				}
+
+				this.attributes = {}
+				for (let attribute in attributes) {
+					this.attributes[attribute] = gl.getAttribLocation(this.program, attributes[attribute])
+				}
+
+				// gl.useProgram(this.program)
+				// gl.uniformMatrix4fv(this.uniforms.view, false, view)
+				// gl.uniformMatrix4fv(this.uniforms.projection, false, projection)
+			}
+			addUniform(name, shaderName) {
+				this.uniforms[name] = gl.getUniformLocation(this.program, shaderName)
+			}
+			addAttribute(name, shaderName) {
+				this.attributes[name] = gl.getAttribLocation(this.program, shaderName)
+			}
 			updateBuffers() {
+				if (this.customFShader || this.customVShader) gl.useProgram(this.program)
 				this.originalFaces = [...this.faces]
 				this.vao = gl.createVertexArray()
 				gl.bindVertexArray(this.vao)
@@ -290,12 +446,19 @@ class Webgl {
 				gl.bindBuffer(gl.ARRAY_BUFFER, this.uvBuffer)
 				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.uvs), gl.STATIC_DRAW)
 				gl.enableVertexAttribArray(webgl.attributes.uvs)
-				gl.vertexAttribPointer(webgl.attributes.uvs, 2, gl.FLOAT, false, 0, 0)	
+				gl.vertexAttribPointer(webgl.attributes.uvs, this.uvD, gl.FLOAT, false, 0, 0)	
 
 				gl.bindBuffer(gl.ARRAY_BUFFER, this.colourBuffer)
         		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.colours), gl.STATIC_DRAW)
 				gl.enableVertexAttribArray(webgl.attributes.colours)
 				gl.vertexAttribPointer(webgl.attributes.colours, 3, gl.FLOAT, false, 0, 0)
+
+				for (let buffer in this.customBuffers) {
+					gl.bindBuffer(gl.ARRAY_BUFFER, this.customBuffers[buffer].buffer)
+					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.customBuffers[buffer].value), gl.STATIC_DRAW)
+					gl.enableVertexAttribArray(this.attributes[this.customBuffers[buffer].attrib])
+					gl.vertexAttribPointer(this.attributes[this.customBuffers[buffer].attrib], this.customBuffers[buffer].dim, gl.FLOAT, false, 0, 0)
+				}
 				
 				gl.bindVertexArray(null)
 			}
@@ -383,9 +546,22 @@ class Webgl {
 				this.pos.z += this.rotOff.z
 				return model
 			}
+			setUniform(name, type, value) {
+				gl.useProgram(this.program)
+				gl["uniform"+type](this.uniforms[name], value)
+			}
 			render() {
 				if (this.vertices.length <= 0 || !this.visible) {
 					return
+				}
+				let webglUniforms
+				let webglAttributes
+				if (this.customFShader || this.customVShader) {
+					gl.useProgram(this.program)
+					webglUniforms = webgl.uniforms
+					webglAttributes = webgl.attributes
+					webgl.uniforms = this.uniforms
+					webgl.attributes = this.attributes
 				}
 
 				if (this.ignoreFog) {
@@ -415,7 +591,12 @@ class Webgl {
 					this.orderCooldown = 1
 					this.orderFaces()
 				}
-				let model = this.getModel()
+				let model
+				if (this.customModel) {
+					model = this.customModel
+				} else {
+					model = this.getModel()
+				}
 
 				if (this.updateTextures) {
 					// this.updateTextures = false
@@ -438,12 +619,17 @@ class Webgl {
 				} else {
 					gl.disableVertexAttribArray(webgl.attributes.uvs)
 				}
-				
 				gl.drawElements(gl.TRIANGLES, this.faces.length, gl.UNSIGNED_INT, 0)
 				gl.bindVertexArray(null)
 
 				if (this.ignoreFog) {
 					gl.uniform1f(webgl.uniforms.rDistance, webgl.rDistance)
+				}
+
+				if (this.customVShader || this.customFShader) {
+					gl.useProgram(webgl.program)
+					webgl.uniforms = webglUniforms
+					webgl.attributes = webglAttributes
 				}
 			}
 			delete() {
@@ -457,6 +643,7 @@ class Webgl {
 			colour = [0, 0, 0]
 			visible = true
 			shading = true
+			setColour = true
 			constructor(x, y, z, width, height, depth, colour, centerRot=true) {
 				super(x, y, z, width, height, depth, [
 					// +X
@@ -551,7 +738,7 @@ class Webgl {
 			}
 			render() {
 				if (!this.visible) { return }
-				if (JSON.stringify(this.colour) != JSON.stringify(this.lastColour)) {
+				if (JSON.stringify(this.colour) != JSON.stringify(this.lastColour) && this.setColour) {
 					this.colours = []
 					if (this.shading) {
 						// +X
@@ -638,4 +825,131 @@ class Webgl {
 			}
 		}
 	}
+    get Points() {
+        return class {
+            points = []
+            colours = []
+            visible = true
+            alpha = 1
+            vertexBuffer
+            colourBuffer
+            vao
+            constructor(points) {
+                webgl.meshes.push(this)
+
+                this.vertexBuffer = gl.createBuffer()
+				this.colourBuffer = gl.createBuffer()
+				this.vao = gl.createVertexArray()
+
+				gl.bindVertexArray(this.vao)
+
+                this.setPoints(points)
+            }
+            setPoints(points) {
+                this.points = []
+                this.colours = []
+                for (let point of points) {
+                    this.points.push(point.x, point.y, point.z)
+                    this.colours.push(...point.c)
+                }
+
+                this.updateBuffers()
+            }
+            updateBuffers() {
+				this.vao = gl.createVertexArray()
+				gl.bindVertexArray(this.vao)
+				gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer)
+        		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.points), gl.STATIC_DRAW)
+				gl.enableVertexAttribArray(webgl.attributes.vertices)
+				gl.vertexAttribPointer(webgl.attributes.vertices, 3, gl.FLOAT, false, 0, 0)
+
+				gl.bindBuffer(gl.ARRAY_BUFFER, this.colourBuffer)
+        		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(this.colours), gl.STATIC_DRAW)
+				gl.enableVertexAttribArray(webgl.attributes.colours)
+				gl.vertexAttribPointer(webgl.attributes.colours, 3, gl.FLOAT, false, 0, 0)
+				
+				gl.bindVertexArray(null)
+            }
+            render() {
+                if (this.points.length <= 0 || !this.visible) {
+					return
+				}
+
+				if (this.ignoreFog) {
+					gl.uniform1f(webgl.uniforms.rDistance, 200)
+				}
+				
+				let model = mat4.create()
+
+                gl.uniform1i(webgl.uniforms.useTexture, false)
+
+				gl.uniformMatrix4fv(webgl.uniforms.model, false, model)
+                gl.uniform1f(webgl.uniforms.alpha2, this.alpha)
+
+				gl.bindVertexArray(this.vao)
+
+                gl.disableVertexAttribArray(webgl.attributes.uvs)
+				
+				gl.drawArrays(gl.POINTS, 0, this.points.length / 3)
+				gl.bindVertexArray(null)
+
+				if (this.ignoreFog) {
+					gl.uniform1f(webgl.uniforms.rDistance, webgl.rDistance)
+				}
+            }
+        }
+    }
+    get Sphere() {
+        return class extends webgl.Mesh {
+            radius = 0
+            colour = [0, 0, 0]
+            res = 30
+            constructor(x, y, z, radius, colour, res=30) {
+                super(x, y, z, 1, 1, 1, [], [], [])
+                this.radius = radius
+                this.colour = colour
+				this.res = res
+                this.updateMesh()
+                this.updateBuffers()
+            }
+            updateMesh() {
+                this.vertices = []
+                this.faces = []
+                this.colours = []
+                for (let lat = 0; lat <= this.res; lat++) {
+                    const theta = (lat * Math.PI) / this.res;
+                    const sinTheta = Math.sin(theta)
+                    const cosTheta = Math.cos(theta)
+
+                    for (let lon = 0; lon <= this.res; lon++) {
+                        const phi = (lon * 2 * Math.PI) / this.res
+                        const sinPhi = Math.sin(phi)
+                        const cosPhi = Math.cos(phi)
+
+                        const x = cosPhi * sinTheta
+                        const y = cosTheta
+                        const z = sinPhi * sinTheta
+
+                        this.vertices.push(this.radius * x, this.radius * y, this.radius * z)
+
+                        let normal = normalv3({x:x, y:y, z:z})
+
+                        let ld = normalv3(lightD)
+                        let light = Math.max(0.1, Math.min(1, normal.x*ld.x+normal.y*ld.y+normal.z*ld.z))
+
+                        this.colours.push(this.colour[0]*light, this.colour[1]*light, this.colour[2]*light)
+                    }
+                }
+                for (let lat = 0; lat < this.res; lat++) {
+                    for (let lon = 0; lon < this.res; lon++) {
+                        const first = lat * (this.res + 1) + lon
+                        const second = first + this.res + 1
+                        this.faces.push(first + 1, second, first, first + 1, second + 1, second)
+                    }
+                }
+            }
+        }
+    }
 }
+
+var webgl = new Webgl()
