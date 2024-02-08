@@ -23,6 +23,7 @@ test.setColour = false
 for (let i = 0; i < 6; i++) {
     test.colours.push(...colourst[i], ...colourst[i], ...colourst[i], ...colourst[i])
 }
+test.order = true
 console.log(test.colours)
 test.updateBuffers()
 console.log(test.colours)
