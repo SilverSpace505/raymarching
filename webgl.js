@@ -9,16 +9,21 @@ class Webgl {
 		layout(location = 0) in vec4 aPosition;
 		layout(location = 1) in vec2 aUv;
 		layout(location = 2) in vec4 aColour; 
+
+		flat out vec3 vPos2;
 		
 		out vec2 vUv;
 		out vec4 vColour;
 		out vec4 vPos;
+		out mat4 vView;
 		void main() {
 			vUv = aUv;
 			vColour = aColour;
 	 		vPos = uModel * aPosition;
+			vPos2 = (uModel * aPosition).xyz;
 			gl_Position = uProjection * uView * uModel * aPosition;
             gl_PointSize = 5.0;
+			vView = uView;
 		}
 	`
 	fragmentShader = `#version 300 es
@@ -27,6 +32,8 @@ class Webgl {
 		in vec2 vUv;
 		in vec4 vColour;
 		in vec4 vPos;
+		in mat4 vView;
+		flat in vec3 vPos2;
 
 		uniform bool useTexture;
 		uniform sampler2D uTexture;
@@ -36,8 +43,26 @@ class Webgl {
         uniform float uAlpha2;
 		
 		out vec4 fragColour;
+
+		const mat4 ditherMatrix = mat4(
+			0.0625,  0.5625,  0.1875,  0.6875,
+			0.8125,  0.3125,  0.9375,  0.4375,
+			0.25,    0.75,    0.125,   0.625,
+			0.9375,  0.4375,  0.8125,  0.3125
+		);
+
+		float ditherPattern(vec2 coord, float alpha) {
+			vec2 ditherCoord = fract(coord * 4.0);
+		
+			// float threshold = ditherMatrix[int(ditherCoord.x)*4+int(ditherCoord.y)];
+		
+			return 1.0;
+		}
 		
 		void main() {
+			vec4 vSpace = vView * vec4(vPos.xyz, 1.0);
+			float distance = length(vSpace.xyz);
+
             vec2 rUv = vec2(vUv.x - round(vUv.x-0.5), vUv.y - round(vUv.y-0.5));
 			
 			vec4 colour = vColour;
@@ -47,14 +72,19 @@ class Webgl {
 				colour.g *= vColour.g;
 				colour.b *= vColour.b;
 			}
-			float alpha = 1.0;
+			float alpha = uAlpha2;
 			if (useAlphaMap) {
 				alpha = texture(uAlpha, rUv).r;
 			}
 	 		if (alpha <= 0.0) {
 				discard;
 			}
-			fragColour = vec4(colour.r, colour.g, colour.b, alpha*uAlpha2);
+			float off = 100.0;
+			if (ditherMatrix[int(mod(gl_FragCoord.x+vPos.x*off+vPos.y*off+vPos.z*off, 4.0))][int(mod(gl_FragCoord.y, 4.0))] < 1.0-alpha) {
+				discard;
+			}
+			fragColour = vec4(colour.r, colour.g, colour.b, 1.0);
+			// fragColour = vec4(distanceToCamera/10.0, distanceToCamera/10.0, distanceToCamera/10.0, 1.0);
 		}
 	`
 	vertexShaderGL
@@ -145,18 +175,20 @@ class Webgl {
     setupFrame(colour=[0, 0, 0, 1]) {
         if (!window.mat4) return
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
-        gl.clearColor(0, 0, 0, 1)
-        gl.clear(gl.STENCIL_BUFFER_BIT | gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-        gl.enable(gl.DEPTH_TEST)
+        gl.clearColor(...colour)
+        // gl.clear(gl.STENCIL_BUFFER_BIT | gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+        // gl.enable(gl.DEPTH_TEST)
+
+        // gl.enable(gl.BLEND)
+        // gl.clear(gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
         gl.enable(gl.BLEND)
-        gl.clear(gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
-        gl.enable(gl.BLEND)
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+		gl.blendEquation(gl.FUNC_ADD)
+        gl.blendFunc(gl.SRC_ALPHA, gl.SRC_ALPHA)
         mat4.perspective(projection, fov * Math.PI / 180, gl.canvas.width / gl.canvas.height, 0.01, 5000)
 
-        gl.enable(gl.DEPTH_TEST)
+        // gl.enable(gl.DEPTH_TEST)
+		gl.clear(gl.COLOR_BUFFER_BIT)
     }
 	setupModels() {
 		this.modelData = []

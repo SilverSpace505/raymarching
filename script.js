@@ -15,18 +15,21 @@ var speed = 5
 
 var camera = {pos: {x: 0, y: 0, z: 0}, rot: {x: 0, y: 0, z: 0}}
 var test = new webgl.Box(0, 0, -5, 1, 1, 1, [1, 0, 0])
-test.alpha = 0.8
+test.alpha = 0.5
 test.oneSide = false
 let colourst = [[1, 0, 0], [1, 0.5, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1]]
-test.colours = []
-test.setColour = false
-for (let i = 0; i < 6; i++) {
-    test.colours.push(...colourst[i], ...colourst[i], ...colourst[i], ...colourst[i])
-}
-test.order = true
-console.log(test.colours)
 test.updateBuffers()
-console.log(test.colours)
+// test.colours = []
+// test.setColour = false
+// for (let i = 0; i < 6; i++) {
+//     test.colours.push(...colourst[i], ...colourst[i], ...colourst[i], ...colourst[i])
+// }
+// test.order = true
+
+var test2 = new webgl.Box(2, 0, -5, 1, 1, 1, [0, 1, 0])
+test2.alpha = 0.5
+test2.oneSide = false
+test2.updateBuffers()
 
 function update(timestamp) {
     requestAnimationFrame(update)
@@ -36,6 +39,8 @@ function update(timestamp) {
     ui.getSu()
     input.setGlobals()
     webgl.resizeCanvas()
+
+    test.order = keys["KeyE"]
 
     if (keys["KeyW"]) {
         camera.pos.x -= Math.sin(camera.rot.y) * speed * delta
