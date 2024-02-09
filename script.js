@@ -18,13 +18,13 @@ var test = new webgl.Box(0, 0, -5, 1, 1, 1, [1, 0, 0])
 test.alpha = 0.5
 test.oneSide = false
 let colourst = [[1, 0, 0], [1, 0.5, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1]]
+test.colours = []
+test.setColour = false
+for (let i = 0; i < 6; i++) {
+    test.colours.push(...colourst[i], ...colourst[i], ...colourst[i], ...colourst[i])
+}
+test.order = true
 test.updateBuffers()
-// test.colours = []
-// test.setColour = false
-// for (let i = 0; i < 6; i++) {
-//     test.colours.push(...colourst[i], ...colourst[i], ...colourst[i], ...colourst[i])
-// }
-// test.order = true
 
 var test2 = new webgl.Box(2, 0, -5, 1, 1, 1, [0, 1, 0])
 test2.alpha = 0.5

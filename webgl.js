@@ -61,7 +61,7 @@ class Webgl {
 		
 		void main() {
 			vec4 vSpace = vView * vec4(vPos.xyz, 1.0);
-			float distance = length(vSpace.xyz);
+			float distance = clamp(length(vSpace.xyz)/1.0, 0.2, 1.0);
 
             vec2 rUv = vec2(vUv.x - round(vUv.x-0.5), vUv.y - round(vUv.y-0.5));
 			
@@ -79,11 +79,11 @@ class Webgl {
 	 		if (alpha <= 0.0) {
 				discard;
 			}
-			float off = 100.0;
-			if (ditherMatrix[int(mod(gl_FragCoord.x+vPos.x*off+vPos.y*off+vPos.z*off, 4.0))][int(mod(gl_FragCoord.y, 4.0))] < 1.0-alpha) {
+			float off = 48203.0;
+			if (ditherMatrix[int(mod(gl_FragCoord.x, 4.0))][int(mod(gl_FragCoord.y, 4.0))] < 1.0-alpha) {
 				discard;
 			}
-			fragColour = vec4(colour.r, colour.g, colour.b, 1.0);
+			fragColour = vec4(colour.r*alpha, colour.g*alpha, colour.b*alpha, 1.0);
 			// fragColour = vec4(distanceToCamera/10.0, distanceToCamera/10.0, distanceToCamera/10.0, 1.0);
 		}
 	`
