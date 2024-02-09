@@ -79,7 +79,6 @@ class Webgl {
 	 		if (alpha <= 0.0) {
 				discard;
 			}
-			float off = 48203.0;
 			if (ditherMatrix[int(mod(gl_FragCoord.x, 4.0))][int(mod(gl_FragCoord.y, 4.0))] < 1.0-alpha) {
 				discard;
 			}
