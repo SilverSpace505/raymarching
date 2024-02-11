@@ -10,7 +10,7 @@ class Webgl {
 		layout(location = 1) in vec2 aUv;
 		layout(location = 2) in vec4 aColour; 
 
-		flat out vec3 vPos2;
+		out vec2 vPos2;
 		
 		out vec2 vUv;
 		out vec4 vColour;
@@ -20,7 +20,7 @@ class Webgl {
 			vUv = aUv;
 			vColour = aColour;
 	 		vPos = uModel * aPosition;
-			vPos2 = (uModel * aPosition).xyz;
+			vPos2 = (uProjection * uView * uModel * aPosition).xy;
 			gl_Position = uProjection * uView * uModel * aPosition;
             gl_PointSize = 5.0;
 			vView = uView;
@@ -33,7 +33,7 @@ class Webgl {
 		in vec4 vColour;
 		in vec4 vPos;
 		in mat4 vView;
-		flat in vec3 vPos2;
+		in vec2 vPos2;
 
 		uniform bool useTexture;
 		uniform sampler2D uTexture;
@@ -44,24 +44,36 @@ class Webgl {
 		
 		out vec4 fragColour;
 
-		const mat4 ditherMatrix = mat4(
-			0.0625,  0.5625,  0.1875,  0.6875,
-			0.8125,  0.3125,  0.9375,  0.4375,
-			0.25,    0.75,    0.125,   0.625,
-			0.9375,  0.4375,  0.8125,  0.3125
+		int ditherMatrix[64] = int[64](
+			0, 32, 8, 40, 2, 34, 10, 42,
+			48, 16, 56, 24, 50, 18, 58, 26,
+			12, 44, 4, 36, 14, 46, 6, 38,
+			60, 28, 52, 20, 62, 30, 54, 22,
+			3, 35, 11, 43, 1, 33, 9, 41,
+			51, 19, 59, 27, 49, 17, 57, 25,
+			15, 47, 7, 39, 13, 45, 5, 37,
+			63, 31, 55, 23, 61, 29, 53, 21
 		);
 
-		float ditherPattern(vec2 coord, float alpha) {
-			vec2 ditherCoord = fract(coord * 4.0);
+		// const float ditherMatrix[16] = float[16](
+		// 	0.0625,  0.5625,  0.1875,  0.6875,
+		// 	0.8125,  0.3125,  0.9375,  0.4375,
+		// 	0.25,    0.75,    0.125,   0.625,
+		// 	0.9375,  0.4375,  0.8125,  0.3125
+		// );
+
+		bool ditherPattern(vec2 coord, float alpha) {
+			float size = 8.0;
+			vec2 ditherCoord = mod(coord, size);
 		
-			// float threshold = ditherMatrix[int(ditherCoord.x)*4+int(ditherCoord.y)];
+			int threshold = ditherMatrix[int(ditherCoord.x)+int(ditherCoord.y)*int(size)];
 		
-			return 1.0;
+			return float(threshold)/64.0 >= alpha;
 		}
 		
 		void main() {
 			vec4 vSpace = vView * vec4(vPos.xyz, 1.0);
-			float distance = clamp(length(vSpace.xyz)/1.0, 0.2, 1.0);
+			float distance = length(vSpace.xyz)/100.0;	
 
             vec2 rUv = vec2(vUv.x - round(vUv.x-0.5), vUv.y - round(vUv.y-0.5));
 			
@@ -79,11 +91,12 @@ class Webgl {
 	 		if (alpha <= 0.0) {
 				discard;
 			}
-			if (ditherMatrix[int(mod(gl_FragCoord.x, 4.0))][int(mod(gl_FragCoord.y, 4.0))] < 1.0-alpha) {
+			float off = 48572.0;
+			if (ditherPattern(gl_FragCoord.xy, alpha+distance)) {
 				discard;
 			}
-			fragColour = vec4(colour.r*alpha, colour.g*alpha, colour.b*alpha, 1.0);
-			// fragColour = vec4(distanceToCamera/10.0, distanceToCamera/10.0, distanceToCamera/10.0, 1.0);
+			fragColour = vec4(colour.r, colour.g, colour.b, 1.0);
+			// fragColour = vec4(distanceToCamera/10.0, distanceToCamera/10.0, distanceToCamera/10.0, alpha);
 		}
 	`
 	vertexShaderGL
@@ -181,9 +194,8 @@ class Webgl {
         // gl.enable(gl.BLEND)
         // gl.clear(gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-        gl.enable(gl.BLEND)
 		gl.blendEquation(gl.FUNC_ADD)
-        gl.blendFunc(gl.SRC_ALPHA, gl.SRC_ALPHA)
+        gl.blendFunc(gl.ONE, gl.ONE)
         mat4.perspective(projection, fov * Math.PI / 180, gl.canvas.width / gl.canvas.height, 0.01, 5000)
 
         // gl.enable(gl.DEPTH_TEST)
@@ -251,7 +263,8 @@ class Webgl {
 			mesh.render()
 		}
 
-		gl.depthMask(false)
+		// gl.depthMask(false)
+		// gl.enable(gl.BLEND)
 
 		for (let mesh of transparent) {
 			mesh.render()

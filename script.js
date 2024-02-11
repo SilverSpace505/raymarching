@@ -31,6 +31,10 @@ test2.alpha = 0.5
 test2.oneSide = false
 test2.updateBuffers()
 
+var ground = new webgl.Box(0, -5, 0, 10, 1, 10, [0.25, 0.5, 0])
+
+var time = 0
+
 function update(timestamp) {
     requestAnimationFrame(update)
 
@@ -39,6 +43,9 @@ function update(timestamp) {
     ui.getSu()
     input.setGlobals()
     webgl.resizeCanvas()
+
+    time += delta
+    test.alpha = Math.sin(time)/2+0.5
 
     test.order = keys["KeyE"]
 
