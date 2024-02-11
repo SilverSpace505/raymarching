@@ -263,13 +263,13 @@ class Webgl {
 			mesh.render()
 		}
 
-		// gl.depthMask(false)
 		// gl.enable(gl.BLEND)
 
 		for (let mesh of transparent) {
 			mesh.render()
 		}
 
+		gl.depthMask(false)
 		gl.disable(gl.DEPTH_TEST)
 		mat4.perspective(projection, 60 * Math.PI/180, gl.canvas.width / gl.canvas.height, 0.01, 5000)
 		this.update()
