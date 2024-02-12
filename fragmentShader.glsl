@@ -13,7 +13,7 @@ layout(std140) uniform Objs {
     vec3 scales[10];
     vec3 rotations[10];
     vec4 colours[10];
-    int type[10];
+    float type[10];
 };
 
 in float vAspect;
@@ -96,7 +96,15 @@ vec4 getDist(vec3 p) {
     // }
 
     for (int i = 0; i < 10; i++) {
-        float d2 = sdBox(p, positions[i], scales[i]);
+        float d2 = maxDist;
+        d2 = float(type[i]);
+        if (type[i] == 0.0) {
+            d2 = sdBox(p, positions[i], scales[i]);
+        } else if (type[i] == 1.0) {
+            d2 = length(p-positions[i])-scales[i].x;
+        } else if (type[i] == 2.0) {
+            d2 = sdTorus(p, positions[i], scales[i].xy);
+        }
         if (d2 < d) {
             d = d2;
             c = colours[i].rgb;

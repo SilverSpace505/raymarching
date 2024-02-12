@@ -89,7 +89,7 @@ class Webgl {
 			objData.scales.push(Math.random(), Math.random(), Math.random(), 0)
 			objData.rotations.push(0, 0, 0, 0)
 			objData.colours.push(Math.random(), Math.random(), Math.random(), 1)
-			objData.types.push(0, 0, 0, 0)
+			objData.types.push(Math.floor(Math.random()*3), 0, 0, 0)
 		}
 
 		this.objBuffer = gl.createBuffer()
