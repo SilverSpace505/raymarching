@@ -2,101 +2,33 @@ class Webgl {
 	gId = 0
 	meshes = []
 	vertexShader = `#version 300 es
-		uniform mat4 uModel;
-		uniform mat4 uView;
-		uniform mat4 uProjection;
 		
-		layout(location = 0) in vec4 aPosition;
-		layout(location = 1) in vec2 aUv;
-		layout(location = 2) in vec4 aColour; 
+		layout(location = 0) in vec2 aPosition;
 
-		out vec2 vPos2;
-		
-		out vec2 vUv;
-		out vec4 vColour;
-		out vec4 vPos;
-		out mat4 vView;
+		out vec2 uv;
+
 		void main() {
-			vUv = aUv;
-			vColour = aColour;
-	 		vPos = uModel * aPosition;
-			vPos2 = (uProjection * uView * uModel * aPosition).xy;
-			gl_Position = uProjection * uView * uModel * aPosition;
-            gl_PointSize = 5.0;
-			vView = uView;
+			gl_Position = vec4(aPosition, 0.0, 1.0);
+			uv = aPosition/2.0+0.5;
 		}
 	`
 	fragmentShader = `#version 300 es
 		precision mediump float;
 
-		in vec2 vUv;
-		in vec4 vColour;
-		in vec4 vPos;
-		in mat4 vView;
-		in vec2 vPos2;
-
-		uniform bool useTexture;
-		uniform sampler2D uTexture;
-		uniform bool useAlphaMap;
-		uniform sampler2D uAlpha;
-
-        uniform float uAlpha2;
-		
 		out vec4 fragColour;
 
-		int ditherMatrix[64] = int[64](
-			0, 32, 8, 40, 2, 34, 10, 42,
-			48, 16, 56, 24, 50, 18, 58, 26,
-			12, 44, 4, 36, 14, 46, 6, 38,
-			60, 28, 52, 20, 62, 30, 54, 22,
-			3, 35, 11, 43, 1, 33, 9, 41,
-			51, 19, 59, 27, 49, 17, 57, 25,
-			15, 47, 7, 39, 13, 45, 5, 37,
-			63, 31, 55, 23, 61, 29, 53, 21
-		);
+		uniform float time;
 
-		// const float ditherMatrix[16] = float[16](
-		// 	0.0625,  0.5625,  0.1875,  0.6875,
-		// 	0.8125,  0.3125,  0.9375,  0.4375,
-		// 	0.25,    0.75,    0.125,   0.625,
-		// 	0.9375,  0.4375,  0.8125,  0.3125
-		// );
-
-		bool ditherPattern(vec2 coord, float alpha) {
-			float size = 8.0;
-			vec2 ditherCoord = mod(coord, size);
-		
-			int threshold = ditherMatrix[int(ditherCoord.x)+int(ditherCoord.y)*int(size)];
-		
-			return float(threshold)/64.0 >= alpha;
-		}
+		in vec2 uv;
 		
 		void main() {
-			vec4 vSpace = vView * vec4(vPos.xyz, 1.0);
-			float distance = length(vSpace.xyz)/100.0;	
+			vec3 colour = vec3(0.0, 0.0, 0.0);
 
-            vec2 rUv = vec2(vUv.x - round(vUv.x-0.5), vUv.y - round(vUv.y-0.5));
-			
-			vec4 colour = vColour;
-			if (useTexture) {
-				colour = texture(uTexture, rUv);
-				colour.r *= vColour.r;
-				colour.g *= vColour.g;
-				colour.b *= vColour.b;
+			if ((uv.x+uv.y)/2.0 < sin(time*5.0)/2.0+0.5 || (uv.x+uv.y)/2.0 > sin((time+3.14)*5.0)/2.0+0.5) {
+				colour = vec3(1.0, 1.0, 1.0);
 			}
-			float alpha = uAlpha2;
-			if (useAlphaMap) {
-				alpha = texture(uAlpha, rUv).r;
-			}
-	 		if (alpha <= 0.0) {
-				discard;
-			}
-			float off = 48572.0;
-			if (ditherPattern(gl_FragCoord.xy, alpha+distance)) {
-				discard;
-			}
-			fragColour = vec4(colour.r, colour.g, colour.b, 1.0);
-			// fragColour = vec4(distanceToCamera/10.0, distanceToCamera/10.0, distanceToCamera/10.0, alpha);
+
+			fragColour = vec4(colour, 1.0);
 		}
 	`
 	vertexShaderGL
@@ -110,6 +42,8 @@ class Webgl {
 	updateProjection = true
 	rDistance = 0
 	modelBuffer
+	positionBuffer
+	uvBuffer
 	ri = 0
 	setup(id="glcanvas") {
         window.glcanvas = document.getElementById(id)
@@ -127,28 +61,18 @@ class Webgl {
 		gl.attachShader(this.program, this.vertexShaderGL)
 		gl.attachShader(this.program, this.fragmentShaderGL)
 		gl.linkProgram(this.program)
+		gl.useProgram(this.program)
 
 		if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
 			console.log(gl.getShaderInfoLog(this.vertexShaderGL))
 			console.log(gl.getShaderInfoLog(this.fragmentShaderGL))
 		}
 		this.attributes = {
-			vertices: gl.getAttribLocation(this.program, "aPosition"),
-			uvs: gl.getAttribLocation(this.program, "aUv"),
-			colours: gl.getAttribLocation(this.program, "aColour"),
+			positions: gl.getAttribLocation(this.program, "aPosition"),
 		}
 		this.uniforms = {
-			model: gl.getUniformLocation(this.program, "uModel"),
-			view: gl.getUniformLocation(this.program, "uView"),
-			projection: gl.getUniformLocation(this.program, "uProjection"),
-			useTexture: gl.getUniformLocation(this.program, "useTexture"),
-			texture: gl.getUniformLocation(this.program, "uTexture"),
-			useAlphaMap: gl.getUniformLocation(this.program, "useAlphaMap"),
-			alpha: gl.getUniformLocation(this.program, "uAlpha"),
-			alpha2: gl.getUniformLocation(this.program, "uAlpha2"),
+			time: gl.getUniformLocation(this.program, "time"),
 		}
-
-		this.modelBuffer = gl.createBuffer()
 
         let mat4script = document.createElement("script")
         mat4script.type = "text/javascript"
@@ -157,6 +81,17 @@ class Webgl {
 
         window.fov = 60
 
+		this.positionBuffer = gl.createBuffer()
+		gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer)
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1.0, -1.0,
+			1.0, -1.0,
+		   -1.0,  1.0,
+		   -1.0,  1.0,
+			1.0, -1.0,
+			1.0,  1.0]), gl.STATIC_DRAW)
+		gl.enableVertexAttribArray(this.attributes.positions)
+		gl.vertexAttribPointer(this.attributes.positions, 2, gl.FLOAT, false, 0, 0)
+				
         mat4script.onload = () => {
             window.view = mat4.create()
             window.projection = mat4.create()
@@ -187,19 +122,19 @@ class Webgl {
     setupFrame(colour=[0, 0, 0, 1]) {
         if (!window.mat4) return
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
-        gl.clearColor(...colour)
+        // gl.clearColor(...colour)
         // gl.clear(gl.STENCIL_BUFFER_BIT | gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
         // gl.enable(gl.DEPTH_TEST)
 
         // gl.enable(gl.BLEND)
         // gl.clear(gl.STENCIL_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-		gl.blendEquation(gl.FUNC_ADD)
-        gl.blendFunc(gl.ONE, gl.ONE)
-        mat4.perspective(projection, fov * Math.PI / 180, gl.canvas.width / gl.canvas.height, 0.01, 5000)
+		// gl.blendEquation(gl.FUNC_ADD)
+        // gl.blendFunc(gl.ONE, gl.ONE)
+        // mat4.perspective(projection, fov * Math.PI / 180, gl.canvas.width / gl.canvas.height, 0.01, 5000)
 
         // gl.enable(gl.DEPTH_TEST)
-		gl.clear(gl.COLOR_BUFFER_BIT)
+		// gl.clear(gl.COLOR_BUFFER_BIT)
     }
 	setupModels() {
 		this.modelData = []
@@ -214,69 +149,17 @@ class Webgl {
 	doRender = true
 	render() {
         if (!window.mat4) return
+		gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
 		gl.useProgram(this.program)
 
-		// this.setupModels()
+		gl.uniform1f(webgl.uniforms.time, time)
 
-		this.update()
-		this.sortCooldown -= 1*60*delta
-		if (this.sortCooldown <= 0) {
-			this.sortCooldown = 30
-			this.sortObjs()
-		}
-		this.ri = 0
+		gl.enableVertexAttribArray(this.attributes.positions)
+		gl.vertexAttribPointer(this.attributes.positions, 2, gl.FLOAT, false, 0, 0)
 
-		let solid = []
-		let transparent = []
-		let ignoreDepth = []
-
-		for (let mesh of this.meshes) {
-			if ((mesh.customVShader || mesh.customFShader) && mesh.visible && mesh.vertices.length > 0) {
-				if (!mesh.gotView) {
-					gl.useProgram(mesh.program)
-					gl.uniformMatrix4fv(mesh.uniforms.view, false, view)
-					gl.useProgram(this.program)
-					mesh.gotView = true
-				}
-				if (!mesh.gotProjection) {
-					gl.useProgram(mesh.program)
-					gl.uniformMatrix4fv(mesh.uniforms.projection, false, projection)
-					gl.useProgram(this.program)
-					mesh.gotProjection = true
-				}
-			}
-			if (this.doRender) {
-				if (mesh.ignoreDepth) {
-					ignoreDepth.push(mesh)
-				} else if (mesh.alpha < 1 || mesh.useAlpha == true) {
-					transparent.push(mesh)
-				} else {
-					solid.push(mesh)
-				}
-			}
-		}
-
-		gl.depthMask(true)
-		gl.enable(gl.DEPTH_TEST)
-
-		for (let mesh of solid) {
-			mesh.render()
-		}
-
-		// gl.enable(gl.BLEND)
-
-		for (let mesh of transparent) {
-			mesh.render()
-		}
-
-		gl.depthMask(false)
-		gl.disable(gl.DEPTH_TEST)
-		mat4.perspective(projection, 60 * Math.PI/180, gl.canvas.width / gl.canvas.height, 0.01, 5000)
-		this.update()
-
-		for (let mesh of ignoreDepth) {
-			mesh.render()
-		}
+		gl.clearColor(0.0, 0.0, 0.0, 1.0)
+		gl.clear(gl.COLOR_BUFFER_BIT)
+		gl.drawArrays(gl.TRIANGLES, 0, 6)
 	}
 	update() {
 		this.updateView = JSON.stringify(view) != JSON.stringify(this.lastView)
