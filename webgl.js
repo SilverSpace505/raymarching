@@ -6,31 +6,18 @@ class Webgl {
 		layout(location = 0) in vec2 aPosition;
 
 		out vec2 uv;
+		out float vAspect;
+
+		uniform float aspect;
 
 		void main() {
 			gl_Position = vec4(aPosition, 0.0, 1.0);
-			uv = aPosition/2.0+0.5;
+			uv = aPosition;
+			uv.x *= aspect;
+			vAspect = aspect;
 		}
 	`
-	fragmentShader = `#version 300 es
-		precision mediump float;
-
-		out vec4 fragColour;
-
-		uniform float time;
-
-		in vec2 uv;
-		
-		void main() {
-			vec3 colour = vec3(0.0, 0.0, 0.0);
-
-			if ((uv.x+uv.y)/2.0 < sin(time*5.0)/2.0+0.5 || (uv.x+uv.y)/2.0 > sin((time+3.14)*5.0)/2.0+0.5) {
-				colour = vec3(1.0, 1.0, 1.0);
-			}
-
-			fragColour = vec4(colour, 1.0);
-		}
-	`
+	fragmentShader = ""
 	vertexShaderGL
 	fragmentShaderGl
 	attributes
@@ -44,6 +31,7 @@ class Webgl {
 	modelBuffer
 	positionBuffer
 	uvBuffer
+	objBuffer
 	ri = 0
 	setup(id="glcanvas") {
         window.glcanvas = document.getElementById(id)
@@ -72,6 +60,9 @@ class Webgl {
 		}
 		this.uniforms = {
 			time: gl.getUniformLocation(this.program, "time"),
+			aspect: gl.getUniformLocation(this.program, "aspect"),
+			cameraPos: gl.getUniformLocation(this.program, "cameraPos"),
+			cameraRot: gl.getUniformLocation(this.program, "cameraRot"),
 		}
 
         let mat4script = document.createElement("script")
@@ -91,6 +82,20 @@ class Webgl {
 			1.0,  1.0]), gl.STATIC_DRAW)
 		gl.enableVertexAttribArray(this.attributes.positions)
 		gl.vertexAttribPointer(this.attributes.positions, 2, gl.FLOAT, false, 0, 0)
+		
+		let objData = {positions: [], scales: [], rotations: [], colours: [], types: []}
+		for (let i = 0; i < 10; i++) {
+			objData.positions.push(Math.random()*10, Math.random()*10, Math.random()*10, 0)
+			objData.scales.push(Math.random(), Math.random(), Math.random(), 0)
+			objData.rotations.push(0, 0, 0, 0)
+			objData.colours.push(Math.random(), Math.random(), Math.random(), 1)
+			objData.types.push(0, 0, 0, 0)
+		}
+
+		this.objBuffer = gl.createBuffer()
+		gl.bindBuffer(gl.UNIFORM_BUFFER, this.objBuffer)
+		gl.bufferData(gl.UNIFORM_BUFFER, new Float32Array([...objData.positions, ...objData.scales, ...objData.rotations, ...objData.colours, ...objData.types]), gl.DYNAMIC_DRAW)
+		gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, this.objBuffer)
 				
         mat4script.onload = () => {
             window.view = mat4.create()
@@ -153,6 +158,9 @@ class Webgl {
 		gl.useProgram(this.program)
 
 		gl.uniform1f(webgl.uniforms.time, time)
+		gl.uniform1f(webgl.uniforms.aspect, gl.canvas.width / gl.canvas.height)
+		gl.uniform3f(webgl.uniforms.cameraPos, camera.pos.x, camera.pos.y, camera.pos.z)
+		gl.uniform3f(webgl.uniforms.cameraRot, camera.rot.x, camera.rot.y, camera.rot.z)
 
 		gl.enableVertexAttribArray(this.attributes.positions)
 		gl.vertexAttribPointer(this.attributes.positions, 2, gl.FLOAT, false, 0, 0)
