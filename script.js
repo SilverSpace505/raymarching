@@ -24,8 +24,25 @@ fetch("fragmentShader.glsl")
     .then(response => response.text())
     .then(fragmentShaderSource => {
         webgl.fragmentShader = fragmentShaderSource
-        ready = 2
+        ready += 1
     })
+
+function createBox(x, y, z, width, height, depth, colour) {
+    let mesh = {type: 0, pos: {x: x, y: y, z: z}, scale: {x: width, y: height, z: depth}, rot: {x: 0, y: 0, z: 0}, colour: colour}
+    webgl.meshes.push(mesh)
+    return mesh
+}
+
+createBox(0, 0.5, 5, 0.5, 0.5, 0.5, [0, 0, 1, 1])
+createBox(2, 1.5, 5, 0.5, 0.5, 0.5, [0, 0, 1, 1])
+
+webgl.meshes.push({type: 2, pos: {x: 0, y: 3, z: 10}, scale: {x: 3, y: 0.5, z: 0}, rot: {x: 0, y: 0, z: 0}, colour: [1, 1, 1, 1]})
+
+// function sdBox(p, p2, s) {
+//     p = subv3l;
+//     vec3 q = abs(p) - s;
+//     return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+// }
 
 function update(timestamp) {
     requestAnimationFrame(update)
@@ -39,6 +56,11 @@ function update(timestamp) {
     fps++
 
     time += delta
+
+    // if (ready == 3) {
+    //     webgl.meshes[0].pos.x = Math.sin(time)
+    //     webgl.meshes[0].colour[1] = Math.sin(time)/2+0.5
+    // }
 
     if (keys["KeyW"]) {
         camera.pos.x += Math.sin(camera.rot.y) * speed * delta
@@ -72,7 +94,7 @@ function update(timestamp) {
         ready = 3
     }
 
-    if (ready = 3) {
+    if (ready == 3) {
         webgl.render()
     }
 

@@ -94,7 +94,7 @@ class Webgl {
 
 		this.objBuffer = gl.createBuffer()
 		gl.bindBuffer(gl.UNIFORM_BUFFER, this.objBuffer)
-		gl.bufferData(gl.UNIFORM_BUFFER, new Float32Array([...objData.positions, ...objData.scales, ...objData.rotations, ...objData.colours, ...objData.types]), gl.DYNAMIC_DRAW)
+		gl.bufferData(gl.UNIFORM_BUFFER, new Float32Array(this.getData()), gl.DYNAMIC_DRAW)
 		gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, this.objBuffer)
 				
         mat4script.onload = () => {
@@ -102,6 +102,25 @@ class Webgl {
             window.projection = mat4.create()
         }
     }
+	getData() {
+		let objData = {positions: [], scales: [], rotations: [], colours: [], types: []}
+		for (let i = 0; i < 10; i++) {
+			if (i < this.meshes.length) {
+				objData.positions.push(this.meshes[i].pos.x, this.meshes[i].pos.y, this.meshes[i].pos.z, 0)
+				objData.scales.push(this.meshes[i].scale.x, this.meshes[i].scale.y, this.meshes[i].scale.z, 0)
+				objData.rotations.push(this.meshes[i].rot.x, this.meshes[i].rot.y, this.meshes[i].rot.z, 0)
+				objData.colours.push(this.meshes[i].colour[0], this.meshes[i].colour[1], this.meshes[i].colour[2], this.meshes[i].colour[3])
+				objData.types.push(this.meshes[i].type, 0, 0, 0)
+			} else {
+				objData.positions.push(0, 0, 0, 0)
+				objData.scales.push(0, 0, 0, 0)
+				objData.rotations.push(0, 0, 0, 0)
+				objData.colours.push(0, 0, 0, 0)
+				objData.types.push(10, 0, 0, 0)
+			}
+		}
+		return [...objData.positions, ...objData.scales, ...objData.rotations, ...objData.colours, ...objData.types]
+	}
     setStyles() {
         glcanvas.style.position = "absolute"
         glcanvas.style.left = 0
@@ -164,6 +183,9 @@ class Webgl {
 
 		gl.enableVertexAttribArray(this.attributes.positions)
 		gl.vertexAttribPointer(this.attributes.positions, 2, gl.FLOAT, false, 0, 0)
+
+		gl.bindBuffer(gl.UNIFORM_BUFFER, this.objBuffer)
+		gl.bufferData(gl.UNIFORM_BUFFER, new Float32Array(this.getData()), gl.DYNAMIC_DRAW)
 
 		gl.clearColor(0.0, 0.0, 0.0, 1.0)
 		gl.clear(gl.COLOR_BUFFER_BIT)

@@ -58,7 +58,8 @@ float sdTorus(vec3 p, vec3 p2, vec2 r) {
 
 float sdBox(vec3 p, vec3 p2, vec3 s) {
     p -= p2;
-    return length(max(abs(p)-s, 0.0));
+    vec3 q = abs(p) - s;
+    return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
 }
 
 vec4 getDist(vec3 p) {
@@ -72,12 +73,8 @@ vec4 getDist(vec3 p) {
     // float bd = sdBox(p, vec3(-4.0, 0.5, 6.0), vec3(0.5, 0.5, 0.5));
     // float cyld = sdCylinder(p, vec3(2.0, 0.5, 2.0), vec3(6.0, 0.5, 4.0), 0.5);
 
-    float d = sphereDist;
-    vec3 c = vec3(0.4, 0.8, 1.0);
-    if (planeDist < d) {
-        d = planeDist;
-        c = vec3(0.25, 0.75, 0.0);
-    }
+    float d = planeDist;
+    vec3 c = vec3(0.25, 0.75, 0.0);
     // if (cd < d) {
     //     d = cd;
     //     c = vec3(1.0, 0.0, 0.0);
